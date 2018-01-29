@@ -123,126 +123,130 @@ CLASS lcl_object_pdws IMPLEMENTATION.
 
     ENDIF.
 
-
-*    DATA: ex_document TYPE REF TO cl_xml_document_base,
-*          ex_errors   TYPE swd_terror,
-*          retcode TYPE i,
-*          stream TYPE xstring,
-*          size TYPE sytabix.
-
-*    DATA: ls_workflow TYPE ty_workflow.
-*
-*    cl_workflow_factory=>create_ws(
-*      EXPORTING
-*        objid                      = mv_objid
-**        no_changes_allowed         = 'X'
-**        enqueue_already_done       = SPACE
-*      RECEIVING
-*        ws_inst                    = DATA(lo_inst)
-*      EXCEPTIONS
-*        workflow_does_not_exist    = 1
-*        object_could_not_be_locked = 2
-*        objid_not_given            = 3
-*        OTHERS                     = 4 ).
-*
-*    IF sy-subrc <> 0.
-*      zcx_abapgit_exception=>raise( |error from CREATE_WS { sy-subrc }| ).
-*    ENDIF.
-
-*    DATA(lo_wf_export) = NEW cl_wfd_wizard_export_intern( |XML-EXPORT| ).
-*
-*    lo_wf_export->execute(
-*      IMPORTING
-*        ex_document         = ex_document    " XML Document - Management (Basis Class)
-*        ex_errors           = ex_errors
-*      EXCEPTIONS
-*        export_not_possible = 1
-*        OTHERS              = 2 ).
-*
-*    IF sy-subrc <> 0.
-**     MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-**                WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
-*    ENDIF.
-*
-*    ex_document->render_2_xstring(
-*      EXPORTING
-*        pretty_print = 'X'
-*      IMPORTING
-*        retcode      = retcode
-*        stream       = stream
-*        size         = size ).
-
-*    io_xml->add( iv_name = 'PDWS'
-*                 ig_data = ls_task ).
-
   ENDMETHOD.                    "serialize
 
   METHOD zif_abapgit_object~deserialize.
 
-*    DATA: lv_mode   TYPE c LENGTH 1,
-*          ls_tpara  TYPE tpara,
-*          ls_tparat TYPE tparat.
-*
-*
-*    SELECT SINGLE * FROM tpara INTO ls_tpara
-*      WHERE paramid = ms_item-obj_name.                 "#EC CI_GENBUFF
-*    IF sy-subrc = 0.
-*      lv_mode = 'M'.
-*    ELSE.
-*      lv_mode = 'I'.
-*    ENDIF.
-*
-*    io_xml->read( EXPORTING iv_name = 'TPARA'
-*                  CHANGING cg_data = ls_tpara ).
-*    io_xml->read( EXPORTING iv_name = 'TPARAT'
-*                  CHANGING cg_data = ls_tparat ).
-*
-*    CALL FUNCTION 'RS_CORR_INSERT'
-*      EXPORTING
-*        object              = ms_item-obj_name
-*        object_class        = 'PARA'
-*        mode                = lv_mode
-*        global_lock         = abap_true
-*        devclass            = iv_package
-*        master_language     = mv_language
-*      EXCEPTIONS
-*        cancelled           = 1
-*        permission_failure  = 2
-*        unknown_objectclass = 3
-*        OTHERS              = 4.
-*    IF sy-subrc <> 0.
-*      zcx_abapgit_exception=>raise( 'error from RS_CORR_INSERT, PARA' ).
-*    ENDIF.
-*
-*    MODIFY tpara FROM ls_tpara.                           "#EC CI_SUBRC
-*    ASSERT sy-subrc = 0.
-*
-*    MODIFY tparat FROM ls_tparat.                         "#EC CI_SUBRC
-*    ASSERT sy-subrc = 0.
+    DATA: ls_wfd_key       TYPE swd_wfdkey,
+          lo_document      TYPE REF TO if_ixml_document,
+          xml              TYPE xstring,
+          lo_pdws          TYPE REF TO if_ixml_element,
+          ostream          TYPE REF TO if_ixml_ostream,
+          lo_converter     TYPE REF TO if_swf_pdef_import,
+          lo_document_base TYPE REF TO cl_xml_document_base.
+
+    io_xml->read(
+      EXPORTING
+        iv_name = 'KEY'
+      CHANGING
+        cg_data = ls_wfd_key ).
+
+    lo_document ?= io_xml->get_raw( ).
+
+    lo_pdws = lo_document->find_from_name_ns( name  = 'PDTS' ).
+
+    CREATE OBJECT lo_converter TYPE cl_wfd_convert_ixml_to_def.
+
+    CREATE OBJECT lo_document_base .
+    lo_document_base->create_with_node( lo_pdws ).
+
+    DATA: im_task_already_created    TYPE abap_bool,
+          ex_return                  TYPE swd_return,
+          ex_errors                  TYPE swd_terror,
+          ex_activation_not_possible TYPE sytabix,
+          ls_head                    TYPE swd_ahead.
+
+    PERFORM ssc_wd_create IN PROGRAM saplswdd
+      USING
+        im_task_already_created
+      CHANGING
+        ex_return.
+
+    DATA(rc) = lo_converter->convert( xml_document = lo_document_base
+                                      language     = sy-langu ).
+
+    CALL FUNCTION 'SWD_INTERN_GET_HEADER'
+      IMPORTING
+        head                = ls_head
+*       global              =
+*       properties          =     " Properties
+*       containers          =     " Container
+*       local_events        =     " Local Event
+*       events              =     " Workflow Definition: Table of Events in WF Builder
+*      TABLES
+*       binding             =     " Workflow Definition: Binding for Steps (Temporary)
+*       functions           =     " Functions
+*       tasks               =     " Tasks Referenced Directly in Workflow Buffer
+      EXCEPTIONS
+        buffer_not_occupied = 1
+        OTHERS              = 2.
+
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |Error from SWD_WORKFLOW_STORE RC={ sy-subrc }| ).
+    ENDIF.
+
+    ls_head-wfd_id  = ls_wfd_key-wfd_id.
+    ls_head-version = ls_wfd_key-version.
+    ls_head-exetyp  = ls_wfd_key-exetyp.
+
+    CALL FUNCTION 'SWD_INTERN_SET_BUFFER'
+      EXPORTING
+        wfd_header = ls_head.
+
+    CALL FUNCTION 'SWD_WORKFLOW_STORE'
+      EXPORTING
+        im_okcode               = 'SAVE'
+        im_package              = iv_package
+        im_force_gen            = abap_true
+*      IMPORTING
+*       ex_task                 = mv_wfd_id
+*       ex_wfdkey               =
+      EXCEPTIONS
+        internal_database_error = 1
+        internal_no_definition  = 2
+        action_canceled         = 3
+        OTHERS                  = 4.
+
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |Error from SWD_WORKFLOW_STORE RC={ sy-subrc }| ).
+    ENDIF.
+
+    CALL FUNCTION 'SWD_WORKFLOW_ACTIVATE'
+      EXPORTING
+        im_force_gen               = abap_true
+        im_package                 = iv_package
+      IMPORTING
+        ex_errors                  = ex_errors
+        ex_activation_not_possible = ex_activation_not_possible
+        ex_return                  = ex_return.
 
   ENDMETHOD.                    "deserialize
 
   METHOD zif_abapgit_object~delete.
 
-*    DATA: lv_paramid TYPE tpara-paramid.
-*
-*
-*    lv_paramid = ms_item-obj_name.
-*    CALL FUNCTION 'RS_PARAMETER_DELETE'
-*      EXPORTING
-*        objectname = lv_paramid
-*      EXCEPTIONS
-*        cancelled  = 1
-*        OTHERS     = 2.
-*    IF sy-subrc <> 0.
-*      zcx_abapgit_exception=>raise( 'error from RS_PRAMETER_DELETE' ).
-*    ENDIF.
+    CALL FUNCTION 'RH_TASK_DELETE'
+      EXPORTING
+        act_otype           = 'WS'
+        act_objid           = mv_objid
+        act_plvar           = '01'
+      EXCEPTIONS
+        no_active_plvar     = 1
+        task_not_found      = 2
+        task_not_deleted    = 3
+        task_not_enqueued   = 4
+        task_type_not_valid = 5
+        OTHERS              = 6.
+
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |Error from RH_TASK_DELETE RC={ sy-subrc }| ).
+    ENDIF.
 
   ENDMETHOD.                    "delete
 
   METHOD zif_abapgit_object~jump.
 
-    CALL FUNCTION 'RS_TOOL_ACCESS'
+    CALL FUNCTION 'RS_TOOL_ACCESS_REMOTE'
+      STARTING NEW TASK 'GIT'
       EXPORTING
         operation     = 'SHOW'
         object_name   = ms_item-obj_name
