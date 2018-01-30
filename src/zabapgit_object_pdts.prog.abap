@@ -135,10 +135,14 @@ CLASS lcl_object_pdts IMPLEMENTATION.
 
   METHOD zif_abapgit_object~serialize.
 
-    DATA: ls_task TYPE ty_task,
-          lo_inst TYPE REF TO cl_workflow_task_ts.
+    DATA: ls_task          TYPE ty_task,
+          lo_inst          TYPE REF TO cl_workflow_task_ts,
+          lo_first_element TYPE REF TO if_ixml_element,
+          lo_xml_dom       TYPE REF TO if_ixml_document.
 
-    FIELD-SYMBOLS: <description> TYPE hrs1002.
+    FIELD-SYMBOLS: <ls_description>             TYPE hrs1002,
+                   <ls_method_binding>          LIKE LINE OF ls_task-method_binding,
+                   <ls_starting_events_binding> TYPE hrs1212.
 
     cl_workflow_factory=>create_ts(
       EXPORTING
@@ -166,18 +170,57 @@ CLASS lcl_object_pdts IMPLEMENTATION.
     ls_task-terminating_events_binding = lo_inst->terminating_events_binding.
     ls_task-descriptions               = lo_inst->descriptions.
 
+    lo_inst->container->to_xml(
+      EXPORTING
+        include_null_values        = abap_true
+        include_initial_values     = abap_true
+        include_typenames          = abap_true
+        include_change_data        = abap_true
+        include_texts              = abap_true
+        include_extension_elements = abap_true
+        save_delta_handling_info   = abap_true
+        use_xslt                   = abap_false
+      IMPORTING
+        xml_dom                    = lo_xml_dom
+      EXCEPTIONS
+        conversion_error           = 1
+        OTHERS                     = 2 ).
+
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |error from CREATE_TS { sy-subrc }| ).
+    ENDIF.
+
     CLEAR: ls_task-method-aedtm,
            ls_task-method-uname.
 
-    LOOP AT ls_task-descriptions ASSIGNING <description>.
+    LOOP AT ls_task-method_binding ASSIGNING <ls_method_binding>.
 
-      CLEAR: <description>-aedtm,
-             <description>-uname.
+      CLEAR: <ls_method_binding>-aedtm,
+             <ls_method_binding>-uname.
+
+    ENDLOOP.
+
+    LOOP AT ls_task-starting_events_binding ASSIGNING <ls_starting_events_binding>.
+
+      CLEAR: <ls_starting_events_binding>-aedtm,
+             <ls_starting_events_binding>-uname.
+
+    ENDLOOP.
+
+    LOOP AT ls_task-descriptions ASSIGNING <ls_description>.
+
+      CLEAR: <ls_description>-aedtm,
+             <ls_description>-uname.
 
     ENDLOOP.
 
     io_xml->add( iv_name = 'PDTS'
                  ig_data = ls_task ).
+
+    lo_first_element ?= lo_xml_dom->get_first_child( ).
+
+    io_xml->add_xml( iv_name = 'CONTAINER'
+                     ii_xml  = lo_first_element ).
 
   ENDMETHOD.                    "serialize
 
@@ -188,6 +231,8 @@ CLASS lcl_object_pdts IMPLEMENTATION.
           ls_hrsobject TYPE hrsobject,
           lo_inst      TYPE REF TO cl_workflow_task_ts,
           lo_gen_task  TYPE REF TO cl_workflow_general_task_def.
+
+    FIELD-SYMBOLS: <ls_method_binding> TYPE hrs1214.
 
     io_xml->read(
       EXPORTING
@@ -241,6 +286,70 @@ CLASS lcl_object_pdts IMPLEMENTATION.
       zcx_abapgit_exception=>raise( |error from CHANGE_METHOD { sy-subrc }| ).
     ENDIF.
 
+    LOOP AT ls_task-method_binding ASSIGNING <ls_method_binding>.
+
+      lo_inst->change_method_binding(
+        EXPORTING
+          binding                       = <ls_method_binding>
+          delete                        = abap_false
+          insert                        = abap_true
+        EXCEPTIONS
+          no_changes_allowed            = 1
+          desired_action_not_clear      = 2
+          ts_cnt_element_does_not_exist = 3
+          binding_could_not_be_deleted  = 4
+          OTHERS                        = 5 ).
+
+      IF sy-subrc <> 0.
+        zcx_abapgit_exception=>raise( |error from CHANGE_METHOD_BINDING { sy-subrc }| ).
+      ENDIF.
+
+    ENDLOOP.
+
+    lo_inst->change_start_events_complete(
+      EXPORTING
+        starting_events    = ls_task-starting_events
+      EXCEPTIONS
+        no_changes_allowed = 1
+        OTHERS             = 2 ).
+
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |error from CHANGE_START_EVENTS_COMPLETE { sy-subrc }| ).
+    ENDIF.
+
+    lo_inst->change_start_evt_bind_complete(
+      EXPORTING
+        new_bindings       = ls_task-starting_events_binding
+      EXCEPTIONS
+        no_changes_allowed = 1
+        OTHERS             = 2 ).
+
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |error from CHANGE_START_EVT_BIND_COMPLETE { sy-subrc }| ).
+    ENDIF.
+
+    lo_inst->change_term_events_complete(
+      EXPORTING
+        terminating_events = ls_task-terminating_events
+      EXCEPTIONS
+        no_changes_allowed = 1
+        OTHERS             = 2 ).
+
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |error from CHANGE_TEXT { sy-subrc }| ).
+    ENDIF.
+
+    lo_inst->change_term_evt_bind_complete(
+      EXPORTING
+        new_bindings       = ls_task-terminating_events_binding
+      EXCEPTIONS
+        no_changes_allowed = 1
+        OTHERS             = 2 ).
+
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |error from CHANGE_TERM_EVENTS_COMPLETE { sy-subrc }| ).
+    ENDIF.
+
     lo_inst->change_text(
       EXPORTING
         subty              = co_subty_task_description
@@ -271,6 +380,35 @@ CLASS lcl_object_pdts IMPLEMENTATION.
 
     IF sy-subrc <> 0.
       zcx_abapgit_exception=>raise( |error from SAVE_STANDARD_TASK { sy-subrc }| ).
+    ENDIF.
+
+    DATA: lo_xml_element TYPE REF TO if_ixml_element,
+          xml_string     TYPE xstring.
+
+    DATA(li_document) = io_xml->get_raw( ).
+
+    DATA(lo_container_element) = li_document->find_from_name_ns( 'CONTAINER' ).
+
+    IF lo_container_element IS BOUND.
+
+      li_document = cl_ixml=>create( )->create_document( ).
+
+      DATA(li_stream) = cl_ixml=>create( )->create_stream_factory( )->create_ostream_xstring( xml_string ).
+
+      li_document->append_child( lo_container_element ).
+
+      cl_ixml=>create( )->create_renderer(
+          document = li_document
+          ostream  = li_stream
+      )->render( ).
+
+      lo_inst->container->import_from_xml(
+        EXPORTING
+*          xml_dom        = li_document
+          xml_stream     = xml_string
+        IMPORTING
+          exception_list = DATA(exception_list) ).
+
     ENDIF.
 
     tadir_insert( iv_package ).
