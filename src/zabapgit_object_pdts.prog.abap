@@ -170,26 +170,6 @@ CLASS lcl_object_pdts IMPLEMENTATION.
     ls_task-terminating_events_binding = lo_inst->terminating_events_binding.
     ls_task-descriptions               = lo_inst->descriptions.
 
-    lo_inst->container->to_xml(
-      EXPORTING
-        include_null_values        = abap_true
-        include_initial_values     = abap_true
-        include_typenames          = abap_true
-        include_change_data        = abap_true
-        include_texts              = abap_true
-        include_extension_elements = abap_true
-        save_delta_handling_info   = abap_true
-        use_xslt                   = abap_false
-      IMPORTING
-        xml_dom                    = lo_xml_dom
-      EXCEPTIONS
-        conversion_error           = 1
-        OTHERS                     = 2 ).
-
-    IF sy-subrc <> 0.
-      zcx_abapgit_exception=>raise( |error from CREATE_TS { sy-subrc }| ).
-    ENDIF.
-
     CLEAR: ls_task-method-aedtm,
            ls_task-method-uname.
 
@@ -217,7 +197,61 @@ CLASS lcl_object_pdts IMPLEMENTATION.
     io_xml->add( iv_name = 'PDTS'
                  ig_data = ls_task ).
 
+    lo_inst->container->to_xml(
+      EXPORTING
+        include_null_values        = abap_true
+        include_initial_values     = abap_true
+        include_typenames          = abap_true
+        include_change_data        = abap_true
+        include_texts              = abap_true
+        include_extension_elements = abap_true
+        save_delta_handling_info   = abap_true
+        use_xslt                   = abap_false
+      IMPORTING
+        xml_dom                    = lo_xml_dom
+        xml_stream                 = DATA(xml_stream)
+      EXCEPTIONS
+        conversion_error           = 1
+        OTHERS                     = 2 ).
+
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |error from TO_XML { sy-subrc }| ).
+    ENDIF.
+
     lo_first_element ?= lo_xml_dom->get_first_child( ).
+
+    DATA(lo_elements) = lo_first_element->get_elements_by_tag_name( name = 'ELEMENTS' ).
+
+    DATA(lo_iterator) = lo_elements->create_iterator( ).
+
+    DO.
+      DATA(element) = lo_iterator->get_next( ).
+
+      IF element IS NOT BOUND.
+        EXIT.
+      ENDIF.
+
+      DATA(children) = element->get_children( ).
+
+      DATA(lo_child_iterator) = children->create_iterator( ).
+
+      DO .
+        element = lo_child_iterator->get_next( ).
+
+        IF element IS NOT BOUND.
+          EXIT.
+        ENDIF.
+
+        DATA(attributes) = element->get_attributes( ).
+
+        DATA(length) = attributes->get_length( ).
+        attributes->remove_named_item( name = 'CHGDTA' ).
+        length = attributes->get_length( ).
+
+      ENDDO.
+
+    ENDDO.
+
 
     io_xml->add_xml( iv_name = 'CONTAINER'
                      ii_xml  = lo_first_element ).
