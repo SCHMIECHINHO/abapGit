@@ -355,6 +355,46 @@ CLASS ZCL_ABAPGIT_OBJECT_PDTS IMPLEMENTATION.
                    <ls_method_binding>          LIKE LINE OF ls_task-method_binding,
                    <ls_starting_events_binding> TYPE hrs1212.
 
+* https://app.assembla.com/spaces/saplink-plugins/subversion/source/HEAD/trunk/Workflow
+*    call function 'RH_TASK_ATTRIBUTES_RUNTIME'
+*      EXPORTING
+*        act_object_ext          =
+**        act_langu               = SY-LANGU
+**        update_buffer           =
+**      IMPORTING
+**        task_attributes         =
+**        container               =     " Container - Implementation of a 'Collection'
+**        task_init_bind          =     " Table with Binding Definitions, Persistent Form
+**        task_om_bind            =     " Table with Binding Definitions, Persistent Form
+**        task_def_role_bind      =     " Table with Binding Definitions, Persistent Form
+**        task_not_role_bind      =     " Table with Binding Definitions, Persistent Form
+**        task_dea_role_bind      =     " Table with Binding Definitions, Persistent Form
+**        task_end_role_bind      =     " Table with Binding Definitions, Persistent Form
+**        task_lat_role_bind      =     " Table with Binding Definitions, Persistent Form
+**        task_xml_container      =
+**      TABLES
+**        act_cont_def            =
+**        act_methods             =
+**        start_events            =
+**        term_events             =
+**        task_init_binding       =
+**        task_om_binding         =
+**        def_role_binding        =
+**        not_role_binding        =
+**        dea_role_binding        =
+**        end_role_binding        =
+**        lat_role_binding        =
+**        event_binding           =     " Standard Infotype 1212 (SAP) Events with Binding Definition
+**      EXCEPTIONS
+**        nothing_found           = 1
+**        activation_not_possible = 2
+**        others                  = 3
+*      .
+*    IF sy-subrc <> 0.
+**     MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+**                WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+*    ENDIF.
+
     cl_workflow_factory=>create_ts(
       EXPORTING
         objid                        = mv_objid
