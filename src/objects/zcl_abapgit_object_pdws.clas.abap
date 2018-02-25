@@ -8,6 +8,7 @@ CLASS zcl_abapgit_object_pdws DEFINITION
 
     INTERFACES zif_abapgit_object .
 
+
     ALIASES mo_files
       FOR zif_abapgit_object~mo_files .
 
