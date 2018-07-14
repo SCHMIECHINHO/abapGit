@@ -71,23 +71,38 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
 
   METHOD zif_abapgit_object~delete.
 
-    CALL FUNCTION 'RH_TASK_DELETE'
+    CALL FUNCTION 'RH_HRSOBJECT_DELETE'
       EXPORTING
         act_otype           = co_object_type_task
         act_objid           = mv_objid
-        act_plvar           = '01'
-        act_istat           = '1'
+        no_confirmation_msg = abap_true
       EXCEPTIONS
-        no_active_plvar     = 1
-        task_not_found      = 2
-        task_not_deleted    = 3
-        task_not_enqueued   = 4
-        task_type_not_valid = 5
-        OTHERS              = 6.
+        enqueue_failed      = 1
+        object_not_deleted  = 2
+        object_not_found    = 3
+        OTHERS              = 4.
 
     IF sy-subrc <> 0.
-      zcx_abapgit_exception=>raise( |error from RH_TASK_DELETE { sy-subrc }| ).
+*      zcx_abapgit_exception=>raise( |error from RH_HRSOBJECT_DELETE { sy-subrc }| ).
     ENDIF.
+
+*    CALL FUNCTION 'RH_TASK_DELETE'
+*      EXPORTING
+*        act_otype           = co_object_type_task
+*        act_objid           = mv_objid
+*        act_plvar           = '01'
+*        act_istat           = '1'
+*      EXCEPTIONS
+*        no_active_plvar     = 1
+*        task_not_found      = 2
+*        task_not_deleted    = 3
+*        task_not_enqueued   = 4
+*        task_type_not_valid = 5
+*        OTHERS              = 6.
+
+*    IF sy-subrc <> 0.
+*      zcx_abapgit_exception=>raise( |error from RH_TASK_DELETE { sy-subrc }| ).
+*    ENDIF.
 
   ENDMETHOD.
 
@@ -241,6 +256,7 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
     lo_inst->save_standard_task(
       EXPORTING
         development_class          = iv_package
+        iv_force_gen               = abap_true
       EXCEPTIONS
         no_changes_allowed         = 1
         no_client_indep_maint      = 2
