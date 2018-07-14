@@ -6,37 +6,35 @@ CLASS zcl_abapgit_object_pdws DEFINITION
 
   PUBLIC SECTION.
 
-    INTERFACES zif_abapgit_object .
-
+    INTERFACES zif_abapgit_object.
 
     ALIASES mo_files
       FOR zif_abapgit_object~mo_files .
 
-    METHODS constructor
-      IMPORTING
-        !is_item     TYPE zif_abapgit_definitions=>ty_item
-        !iv_language TYPE spras .
+    METHODS:
+      constructor
+        IMPORTING
+          !is_item     TYPE zif_abapgit_definitions=>ty_item
+          !iv_language TYPE spras.
 
   PRIVATE SECTION.
-    DATA mv_objid TYPE hrobject-objid .
-    DATA mv_wfd_id TYPE swd_wfd_id .
+    DATA:
+      mv_objid  TYPE hrobject-objid,
+      mv_wfd_id TYPE swd_wfd_id.
 
 ENDCLASS.
 
 
-
-CLASS ZCL_ABAPGIT_OBJECT_PDWS IMPLEMENTATION.
+CLASS zcl_abapgit_object_pdws IMPLEMENTATION.
 
 
   METHOD constructor.
-
 
     super->constructor( is_item     = is_item
                         iv_language = iv_language ).
 
     mv_objid = ms_item-obj_name.
     mv_wfd_id = |WS{ mv_objid }|.
-
 
   ENDMETHOD.
 
@@ -57,7 +55,6 @@ CLASS ZCL_ABAPGIT_OBJECT_PDWS IMPLEMENTATION.
 
   METHOD zif_abapgit_object~delete.
 
-
     CALL FUNCTION 'RH_TASK_DELETE'
       EXPORTING
         act_otype           = 'WS'
@@ -75,20 +72,22 @@ CLASS ZCL_ABAPGIT_OBJECT_PDWS IMPLEMENTATION.
       zcx_abapgit_exception=>raise( |Error from RH_TASK_DELETE RC={ sy-subrc }| ).
     ENDIF.
 
-
   ENDMETHOD.
 
 
   METHOD zif_abapgit_object~deserialize.
 
-
-    DATA: ls_wfd_key       TYPE swd_wfdkey,
-          lo_document      TYPE REF TO if_ixml_document,
-          xml              TYPE xstring,
-          lo_pdws          TYPE REF TO if_ixml_element,
-          ostream          TYPE REF TO if_ixml_ostream,
-          lo_converter     TYPE REF TO if_swf_pdef_import,
-          lo_document_base TYPE REF TO cl_xml_document_base.
+    DATA: ls_wfd_key                 TYPE swd_wfdkey,
+          lo_document                TYPE REF TO if_ixml_document,
+          lo_pdws                    TYPE REF TO if_ixml_element,
+          lo_converter               TYPE REF TO if_swf_pdef_import,
+          lo_document_base           TYPE REF TO cl_xml_document_base,
+          im_task_already_created    TYPE abap_bool,
+          ex_return                  TYPE swd_return,
+          ex_errors                  TYPE swd_terror,
+          ex_activation_not_possible TYPE sytabix,
+          ls_head                    TYPE swd_ahead,
+          lv_rc                      TYPE sysubrc.
 
     io_xml->read(
       EXPORTING
@@ -105,11 +104,6 @@ CLASS ZCL_ABAPGIT_OBJECT_PDWS IMPLEMENTATION.
     CREATE OBJECT lo_document_base .
     lo_document_base->create_with_node( lo_pdws ).
 
-    DATA: im_task_already_created    TYPE abap_bool,
-          ex_return                  TYPE swd_return,
-          ex_errors                  TYPE swd_terror,
-          ex_activation_not_possible TYPE sytabix,
-          ls_head                    TYPE swd_ahead.
 
     PERFORM ssc_wd_create IN PROGRAM saplswdd
       USING
@@ -117,8 +111,8 @@ CLASS ZCL_ABAPGIT_OBJECT_PDWS IMPLEMENTATION.
       CHANGING
         ex_return.
 
-    DATA(rc) = lo_converter->convert( xml_document = lo_document_base
-                                      language     = sy-langu ).
+    lv_rc = lo_converter->convert( xml_document = lo_document_base
+                                   language     = sy-langu ).
 
     CALL FUNCTION 'SWD_INTERN_GET_HEADER'
       IMPORTING
@@ -175,7 +169,6 @@ CLASS ZCL_ABAPGIT_OBJECT_PDWS IMPLEMENTATION.
         ex_activation_not_possible = ex_activation_not_possible
         ex_return                  = ex_return.
 
-
   ENDMETHOD.
 
 
@@ -222,7 +215,6 @@ CLASS ZCL_ABAPGIT_OBJECT_PDWS IMPLEMENTATION.
 
   METHOD zif_abapgit_object~jump.
 
-
     CALL FUNCTION 'RS_TOOL_ACCESS_REMOTE'
       STARTING NEW TASK 'GIT'
       EXPORTING
@@ -231,7 +223,6 @@ CLASS ZCL_ABAPGIT_OBJECT_PDWS IMPLEMENTATION.
         object_type   = ms_item-obj_type
         in_new_window = abap_true.
 
-
   ENDMETHOD.
 
 
@@ -239,9 +230,6 @@ CLASS ZCL_ABAPGIT_OBJECT_PDWS IMPLEMENTATION.
 
 
     DATA: ls_wfd_key    TYPE swd_wfdkey,
-          retcode       TYPE i,
-          stream        TYPE xstring,
-          size          TYPE sytabix,
           first_node    TYPE REF TO if_ixml_element,
           lo_converter  TYPE REF TO if_swf_pdef_export,
           lo_document   TYPE REF TO cl_xml_document_base,
@@ -283,4 +271,9 @@ CLASS ZCL_ABAPGIT_OBJECT_PDWS IMPLEMENTATION.
 
 
   ENDMETHOD.
+
+  METHOD zif_abapgit_object~is_locked.
+    rv_is_locked = abap_false.
+  ENDMETHOD.
+
 ENDCLASS.
