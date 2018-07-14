@@ -39,7 +39,7 @@ ENDCLASS.
 
 
 
-CLASS ZCL_ABAPGIT_OBJECT_PDTS IMPLEMENTATION.
+CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
 
 
   METHOD constructor.
@@ -353,7 +353,8 @@ CLASS ZCL_ABAPGIT_OBJECT_PDTS IMPLEMENTATION.
 
     FIELD-SYMBOLS: <ls_description>             TYPE hrs1002,
                    <ls_method_binding>          LIKE LINE OF ls_task-method_binding,
-                   <ls_starting_events_binding> TYPE hrs1212.
+                   <ls_starting_events_binding> TYPE hrs1212,
+                   <ls_term_events_binding>     TYPE hrs1212.
 
 * https://app.assembla.com/spaces/saplink-plugins/subversion/source/HEAD/trunk/Workflow
 *    call function 'RH_TASK_ATTRIBUTES_RUNTIME'
@@ -445,6 +446,13 @@ CLASS ZCL_ABAPGIT_OBJECT_PDTS IMPLEMENTATION.
 
     ENDLOOP.
 
+    LOOP AT ls_task-terminating_events_binding ASSIGNING <ls_term_events_binding>.
+
+      CLEAR: <ls_term_events_binding>-aedtm,
+             <ls_term_events_binding>-uname.
+
+    ENDLOOP.
+
     io_xml->add( iv_name = 'PDTS'
                  ig_data = ls_task ).
 
@@ -509,4 +517,9 @@ CLASS ZCL_ABAPGIT_OBJECT_PDTS IMPLEMENTATION.
 
 
   ENDMETHOD.
+
+  METHOD zif_abapgit_object~is_locked.
+    rv_is_locked = abap_false.
+  ENDMETHOD.
+
 ENDCLASS.
