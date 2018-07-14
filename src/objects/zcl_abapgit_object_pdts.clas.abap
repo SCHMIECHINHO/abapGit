@@ -2,21 +2,20 @@ CLASS zcl_abapgit_object_pdts DEFINITION
   PUBLIC
   INHERITING FROM zcl_abapgit_objects_super
   FINAL
-  CREATE PUBLIC .
+  CREATE PUBLIC.
 
   PUBLIC SECTION.
 
-    INTERFACES zif_abapgit_object .
+    INTERFACES zif_abapgit_object.
 
     ALIASES mo_files
-      FOR zif_abapgit_object~mo_files .
+      FOR zif_abapgit_object~mo_files.
 
-    METHODS constructor
-      IMPORTING
-        !is_item     TYPE zif_abapgit_definitions=>ty_item
-        !iv_language TYPE spras .
-  PROTECTED SECTION.
-  PRIVATE SECTION.
+    METHODS:
+      constructor
+        IMPORTING
+          !is_item     TYPE zif_abapgit_definitions=>ty_item
+          !iv_language TYPE spras.
 
     TYPES:
       BEGIN OF ty_task,
@@ -32,9 +31,13 @@ CLASS zcl_abapgit_object_pdts DEFINITION
         descriptions               TYPE wstexts,
       END OF ty_task .
 
-    CONSTANTS co_subty_task_description TYPE hr_s_subty VALUE '0120' ##NO_TEXT.
-    CONSTANTS co_object_type_task TYPE hr_sotype VALUE 'TS' ##NO_TEXT.
-    DATA mv_objid TYPE hrobject-objid .
+    CONSTANTS:
+      co_subty_task_description TYPE hr_s_subty VALUE '0120' ##NO_TEXT,
+      co_object_type_task       TYPE hr_sotype VALUE 'TS' ##NO_TEXT.
+
+    DATA:
+      mv_objid TYPE hrobject-objid.
+
 ENDCLASS.
 
 
@@ -44,12 +47,10 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
 
   METHOD constructor.
 
-
     super->constructor( is_item     = is_item
                         iv_language = iv_language ).
 
     mv_objid = ms_item-obj_name.
-
 
   ENDMETHOD.
 
@@ -70,7 +71,6 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
 
   METHOD zif_abapgit_object~delete.
 
-
     CALL FUNCTION 'RH_TASK_DELETE'
       EXPORTING
         act_otype           = co_object_type_task
@@ -89,18 +89,20 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
       zcx_abapgit_exception=>raise( |error from RH_TASK_DELETE { sy-subrc }| ).
     ENDIF.
 
-
   ENDMETHOD.
 
 
   METHOD zif_abapgit_object~deserialize.
 
-
-    DATA: ls_task      TYPE ty_task,
-          lv_message   TYPE string,
-          ls_hrsobject TYPE hrsobject,
-          lo_inst      TYPE REF TO cl_workflow_task_ts,
-          lo_gen_task  TYPE REF TO cl_workflow_general_task_def.
+    DATA: ls_task              TYPE ty_task,
+          ls_hrsobject         TYPE hrsobject,
+          lo_inst              TYPE REF TO cl_workflow_task_ts,
+          lo_gen_task          TYPE REF TO cl_workflow_general_task_def,
+          lv_xml_string        TYPE xstring,
+          li_document          TYPE REF TO if_ixml_document,
+          li_container_element TYPE REF TO if_ixml_element,
+          li_stream            TYPE REF TO if_ixml_ostream,
+          lt_exception_list    TYPE swf_cx_tab.
 
     FIELD-SYMBOLS: <ls_method_binding> TYPE hrs1214.
 
@@ -252,20 +254,17 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
       zcx_abapgit_exception=>raise( |error from SAVE_STANDARD_TASK { sy-subrc }| ).
     ENDIF.
 
-    DATA: lo_xml_element TYPE REF TO if_ixml_element,
-          xml_string     TYPE xstring.
+    li_document = io_xml->get_raw( ).
 
-    DATA(li_document) = io_xml->get_raw( ).
+    li_container_element = li_document->find_from_name_ns( 'CONTAINER' ).
 
-    DATA(lo_container_element) = li_document->find_from_name_ns( 'CONTAINER' ).
-
-    IF lo_container_element IS BOUND.
+    IF li_container_element IS BOUND.
 
       li_document = cl_ixml=>create( )->create_document( ).
 
-      DATA(li_stream) = cl_ixml=>create( )->create_stream_factory( )->create_ostream_xstring( xml_string ).
+      li_stream = cl_ixml=>create( )->create_stream_factory( )->create_ostream_xstring( lv_xml_string ).
 
-      li_document->append_child( lo_container_element ).
+      li_document->append_child( li_container_element ).
 
       cl_ixml=>create( )->create_renderer(
           document = li_document
@@ -274,21 +273,18 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
 
       lo_inst->container->import_from_xml(
         EXPORTING
-*          xml_dom        = li_document
-          xml_stream     = xml_string
+          xml_stream     = lv_xml_string
         IMPORTING
-          exception_list = DATA(exception_list) ).
+          exception_list = lt_exception_list ).
 
     ENDIF.
 
     tadir_insert( iv_package ).
 
-
   ENDMETHOD.
 
 
   METHOD zif_abapgit_object~exists.
-
 
     DATA: lv_endda TYPE plog-endda.
 
@@ -310,7 +306,6 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
 
     rv_bool = boolc( sy-subrc = 0 ).
 
-
   ENDMETHOD.
 
 
@@ -330,7 +325,6 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
 
   METHOD zif_abapgit_object~jump.
 
-
     CALL FUNCTION 'RS_TOOL_ACCESS_REMOTE'
       STARTING NEW TASK 'GIT'
       EXPORTING
@@ -339,17 +333,23 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
         object_type   = ms_item-obj_type
         in_new_window = abap_true.
 
-
   ENDMETHOD.
 
 
   METHOD zif_abapgit_object~serialize.
 
-
-    DATA: ls_task          TYPE ty_task,
-          lo_inst          TYPE REF TO cl_workflow_task_ts,
-          lo_first_element TYPE REF TO if_ixml_element,
-          lo_xml_dom       TYPE REF TO if_ixml_document.
+    DATA: ls_task           TYPE ty_task,
+          lo_inst           TYPE REF TO cl_workflow_task_ts,
+          li_first_element  TYPE REF TO if_ixml_element,
+          lo_xml_dom        TYPE REF TO if_ixml_document,
+          li_elements       TYPE REF TO if_ixml_node_collection,
+          li_iterator       TYPE REF TO if_ixml_node_iterator,
+          li_element        TYPE REF TO if_ixml_node,
+          li_children       TYPE REF TO if_ixml_node_list,
+          li_child_iterator TYPE REF TO if_ixml_node_iterator,
+          li_attributes     TYPE REF TO if_ixml_named_node_map,
+          lv_length         TYPE i,
+          lv_xml_stream     TYPE xstring.
 
     FIELD-SYMBOLS: <ls_description>             TYPE hrs1002,
                    <ls_method_binding>          LIKE LINE OF ls_task-method_binding,
@@ -468,7 +468,7 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
         use_xslt                   = abap_false
       IMPORTING
         xml_dom                    = lo_xml_dom
-        xml_stream                 = DATA(xml_stream)
+        xml_stream                 = lv_xml_stream
       EXCEPTIONS
         conversion_error           = 1
         OTHERS                     = 2 ).
@@ -477,44 +477,42 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
       zcx_abapgit_exception=>raise( |error from TO_XML { sy-subrc }| ).
     ENDIF.
 
-    lo_first_element ?= lo_xml_dom->get_first_child( ).
+    li_first_element ?= lo_xml_dom->get_first_child( ).
 
-    DATA(lo_elements) = lo_first_element->get_elements_by_tag_name( name = 'ELEMENTS' ).
+    li_elements = li_first_element->get_elements_by_tag_name( name = 'ELEMENTS' ).
 
-    DATA(lo_iterator) = lo_elements->create_iterator( ).
+    li_iterator = li_elements->create_iterator( ).
 
     DO.
-      DATA(element) = lo_iterator->get_next( ).
+      li_element = li_iterator->get_next( ).
 
-      IF element IS NOT BOUND.
+      IF li_element IS NOT BOUND.
         EXIT.
       ENDIF.
 
-      DATA(children) = element->get_children( ).
+      li_children = li_element->get_children( ).
 
-      DATA(lo_child_iterator) = children->create_iterator( ).
+      li_child_iterator = li_children->create_iterator( ).
 
-      DO .
-        element = lo_child_iterator->get_next( ).
+      DO.
+        li_element = li_child_iterator->get_next( ).
 
-        IF element IS NOT BOUND.
+        IF li_element IS NOT BOUND.
           EXIT.
         ENDIF.
 
-        DATA(attributes) = element->get_attributes( ).
+        li_attributes = li_element->get_attributes( ).
 
-        DATA(length) = attributes->get_length( ).
-        attributes->remove_named_item( name = 'CHGDTA' ).
-        length = attributes->get_length( ).
+        lv_length = li_attributes->get_length( ).
+        li_attributes->remove_named_item( name = 'CHGDTA' ).
+        lv_length = li_attributes->get_length( ).
 
       ENDDO.
 
     ENDDO.
 
-
     io_xml->add_xml( iv_name = 'CONTAINER'
-                     ii_xml  = lo_first_element ).
-
+                     ii_xml  = li_first_element ).
 
   ENDMETHOD.
 
