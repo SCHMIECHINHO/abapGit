@@ -536,4 +536,8 @@ CLASS zcl_abapgit_object_pdts IMPLEMENTATION.
     rv_is_locked = abap_false.
   ENDMETHOD.
 
+  METHOD zif_abapgit_object~is_active.
+    rv_active = abap_true.
+  ENDMETHOD.
+
 ENDCLASS.
