@@ -935,6 +935,20 @@ CLASS ZCL_ABAPGIT_OBJECTS_PROGRAM IMPLEMENTATION.
       CREATE OBJECT lo_xml.
     ENDIF.
 
+    " CSN specific hacks
+    IF ls_progdir-name CS |/CSN/LFFS_SM30F00|
+    OR ls_progdir-name CS |/CSN/LFFS_SM30I00|
+    OR ls_progdir-name CS |/CSN/LFFS_SM30T00|.
+      CLEAR: ls_progdir-uccheck.
+    ENDIF.
+
+    IF ls_progdir-name CS |/CSN/LFFS_SM30F00|
+    OR ls_progdir-name CS |/CSN/LFFS_SM30I00|
+    OR ls_progdir-name CS |/CSN/SAPLFFS_SM30|.
+      ls_progdir-sqlx = abap_true.
+    ENDIF.
+    " CSN end
+
     lo_xml->add( iv_name = 'PROGDIR'
                  ig_data = ls_progdir ).
     IF ls_progdir-subc = '1' OR ls_progdir-subc = 'M'.
