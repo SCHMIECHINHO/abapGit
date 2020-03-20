@@ -1,4 +1,4 @@
-CLASS zcl_abapgit_gui_page_patch DEFINITION
+  CLASS zcl_abapgit_gui_page_patch DEFINITION
   PUBLIC
   INHERITING FROM zcl_abapgit_gui_page_diff
   CREATE PUBLIC .
@@ -134,6 +134,8 @@ CLASS zcl_abapgit_gui_page_patch DEFINITION
         RETURNING
           VALUE(rv_are_all_lines_patched) TYPE abap_bool,
 
+      on_pushed FOR EVENT pushed OF zcl_abapgit_repo_online,
+
       apply_patch_for
         IMPORTING
           iv_filename   TYPE string
@@ -181,18 +183,14 @@ CLASS ZCL_ABAPGIT_GUI_PAGE_PATCH IMPLEMENTATION.
   METHOD add_menu_begin.
 
     io_menu->add(
-        iv_txt   = |Refresh local|
-        iv_typ   = zif_abapgit_html=>c_action_type-dummy
-        iv_act   = c_actions-refresh_local
-        iv_id    = c_actions-refresh_local
-        iv_title = |Refresh all local objects, without refreshing the remote| ).
-
-    io_menu->add(
         iv_txt   = |Refresh|
         iv_typ   = zif_abapgit_html=>c_action_type-dummy
         iv_act   = c_actions-refresh
         iv_id    = c_actions-refresh
         iv_title = |Complete refresh of all objects, local and remote| ).
+
+    SET HANDLER on_pushed FOR mo_repo.
+    ms_control-page_menu = build_menu( ).
 
   ENDMETHOD.
 
@@ -297,6 +295,40 @@ CLASS ZCL_ABAPGIT_GUI_PAGE_PATCH IMPLEMENTATION.
                        iv_patch_flag = iv_patch_flag ).
 
     ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD on_pushed.
+
+    DATA: li_page TYPE REF TO zif_abapgit_gui_renderable.
+
+    mv_pushed = abap_true.
+
+    TRY.
+        IF is_every_changed_line_patched( ) = abap_true.
+          " remove stage page from gui navigation stack, returning to the repo
+          zcl_abapgit_ui_factory=>get_gui( )->pop( ).
+          SET HANDLER on_pushed FOR mo_repo ACTIVATION abap_false.
+        ENDIF.
+      CATCH zcx_abapgit_exception ##NO_HANDLER.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD get_patch_data.
+
+    DATA: lv_section TYPE string.
+
+    CLEAR: ev_filename, ev_line_index.
+
+    FIND FIRST OCCURRENCE OF REGEX `patch_line` && `_(.*)_(\d)+_(\d+)`
+         IN iv_patch
+         SUBMATCHES ev_filename lv_section ev_line_index.
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |Invalid patch| ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -423,22 +455,6 @@ CLASS ZCL_ABAPGIT_GUI_PAGE_PATCH IMPLEMENTATION.
 
     IF ro_diff IS NOT BOUND.
       zcx_abapgit_exception=>raise( |Invalid filename { iv_filename }| ).
-    ENDIF.
-
-  ENDMETHOD.
-
-
-  METHOD get_patch_data.
-
-    DATA: lv_section TYPE string.
-
-    CLEAR: ev_filename, ev_line_index.
-
-    FIND FIRST OCCURRENCE OF REGEX `patch_line` && `_(.*)_(\d)+_(\d+)`
-         IN iv_patch
-         SUBMATCHES ev_filename lv_section ev_line_index.
-    IF sy-subrc <> 0.
-      zcx_abapgit_exception=>raise( |Invalid patch| ).
     ENDIF.
 
   ENDMETHOD.

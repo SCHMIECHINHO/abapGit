@@ -48,6 +48,9 @@ CLASS zcl_abapgit_repo_online DEFINITION
         REDEFINITION .
     METHODS rebuild_local_checksums
         REDEFINITION .
+
+    EVENTS pushed.
+
   PROTECTED SECTION.
   PRIVATE SECTION.
 
@@ -71,7 +74,7 @@ ENDCLASS.
 
 
 
-CLASS ZCL_ABAPGIT_REPO_ONLINE IMPLEMENTATION.
+CLASS zcl_abapgit_repo_online IMPLEMENTATION.
 
 
   METHOD fetch_remote.
@@ -317,6 +320,8 @@ CLASS ZCL_ABAPGIT_REPO_ONLINE IMPLEMENTATION.
     update_local_checksums( ls_push-updated_files ).
 
     reset_status( ).
+
+    RAISE EVENT pushed.
 
   ENDMETHOD.
 ENDCLASS.

@@ -43,13 +43,19 @@ CLASS zcl_abapgit_gui DEFINITION
       RAISING
         zcx_abapgit_exception.
 
+    METHODS pop
+      RETURNING
+        VALUE(ri_page) TYPE REF TO zif_abapgit_gui_renderable
+      RAISING
+        zcx_abapgit_exception.
+
     METHODS on_event FOR EVENT sapevent OF cl_gui_html_viewer
       IMPORTING
-          action
-          frame
-          getdata
-          postdata
-          query_table.
+        action
+        frame
+        getdata
+        postdata
+        query_table.
 
     METHODS constructor
       IMPORTING
@@ -102,9 +108,9 @@ CLASS zcl_abapgit_gui DEFINITION
 
     METHODS handle_action
       IMPORTING
-        iv_action      TYPE c
-        iv_getdata     TYPE c OPTIONAL
-        it_postdata    TYPE cnht_post_data_tab OPTIONAL.
+        iv_action   TYPE c
+        iv_getdata  TYPE c OPTIONAL
+        it_postdata TYPE cnht_post_data_tab OPTIONAL.
 
     METHODS handle_error
       IMPORTING
@@ -113,7 +119,7 @@ ENDCLASS.
 
 
 
-CLASS ZCL_ABAPGIT_GUI IMPLEMENTATION.
+CLASS zcl_abapgit_gui IMPLEMENTATION.
 
 
   METHOD back.
@@ -364,9 +370,9 @@ CLASS ZCL_ABAPGIT_GUI IMPLEMENTATION.
 
   METHOD render.
 
-    DATA: lv_url           TYPE w3url,
-          lv_html          TYPE string,
-          li_html          TYPE REF TO zif_abapgit_html.
+    DATA: lv_url  TYPE w3url,
+          lv_html TYPE string,
+          li_html TYPE REF TO zif_abapgit_html.
 
     IF mi_cur_page IS NOT BOUND.
       zcx_abapgit_exception=>raise( 'GUI error: no current page' ).
@@ -438,4 +444,25 @@ CLASS ZCL_ABAPGIT_GUI IMPLEMENTATION.
     ASSERT ii_event_handler IS BOUND.
     INSERT ii_event_handler INTO mt_event_handlers INDEX 1.
   ENDMETHOD.
+
+
+  METHOD pop.
+
+    DATA: lv_index TYPE i,
+          ls_stack TYPE ty_page_stack.
+
+    lv_index = lines( mt_stack ).
+
+    IF lv_index = 0.
+      zcx_abapgit_exception=>raise( |Empty gui stack| ).
+    ENDIF.
+
+    READ TABLE mt_stack INDEX lv_index INTO ls_stack.
+    ASSERT sy-subrc = 0.
+
+    DELETE mt_stack INDEX lv_index.
+    ri_page = ls_stack-page.
+
+  ENDMETHOD.
+
 ENDCLASS.
