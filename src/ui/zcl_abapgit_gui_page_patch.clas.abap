@@ -490,8 +490,6 @@ CLASS ZCL_ABAPGIT_GUI_PAGE_PATCH IMPLEMENTATION.
 
   METHOD on_pushed.
 
-    DATA: li_page TYPE REF TO zif_abapgit_gui_renderable.
-
     mv_pushed = abap_true.
 
     TRY.
